@@ -636,7 +636,7 @@
         const resultsList = document.getElementById('results-list');
         const emptyState = document.getElementById('empty-state');
 
-        // State variables
+        // State
         let activeTab = 'upload';
         let file = null;
         let isChecking = false;
@@ -683,10 +683,8 @@
                 return;
             }
             
-            // Validate file type
             const validTypes = ['.pdf', '.docx', '.txt'];
             const fileExt = '.' + selectedFile.name.split('.').pop().toLowerCase();
-            
             if (!validTypes.includes(fileExt)) {
                 alert('Format file tidak didukung. Gunakan PDF, DOCX, atau TXT.');
                 fileUpload.value = '';
@@ -699,23 +697,20 @@
             uploadedFileName.textContent = selectedFile.name;
             fileName.textContent = selectedFile.name;
             fileInfo.classList.remove('hidden');
-            
-            // Reset results area
+
             resultsContainer.classList.add('hidden');
             summaryCard.classList.add('hidden');
             detailedResults.classList.add('hidden');
             emptyState.classList.add('hidden');
-            
+
             updateCheckButtonState();
         }
 
-        // Character count update
         function updateCharCount() {
             charCount.textContent = textInput.value.length;
             updateCheckButtonState();
         }
 
-        // Update check button state
         function updateCheckButtonState() {
             const disabled =
                 (activeTab === 'upload' && !file) ||
@@ -730,49 +725,26 @@
             }
         }
 
-        // Function to highlight matching text (SAMA DENGAN NOTEBOOK)
+        // Highlighting
         function highlightText(inputText, result) {
             if (!inputText || !result) return { text: inputText, hasHighlight: false };
-            
             const abstract = result.abstract || '';
-            // Ambil 20 kata pertama untuk matching
             const tokens = abstract.split(/\s+/).slice(0, 20);
-            
-            if (tokens.length === 0) return { text: inputText, hasHighlight: false };
-            
-            // Escape special characters untuk regex
-            const escapedTokens = tokens.map(token => 
-                token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-            ).filter(token => token.length > 2); // Hanya kata dengan panjang > 2 huruf
-            
-            if (escapedTokens.length === 0) return { text: inputText, hasHighlight: false };
-            
-            // Buat regex pattern untuk mencari kata-kata yang sama
+            if (!tokens.length) return { text: inputText, hasHighlight: false };
+            const escapedTokens = tokens.map(token => token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).filter(t => t.length > 2);
+            if (!escapedTokens.length) return { text: inputText, hasHighlight: false };
             const pattern = new RegExp(`\\b(${escapedTokens.join('|')})\\b`, 'gi');
-            
             let hasHighlight = false;
-            
-            // Ganti matching words dengan highlight
-            const highlightedText = inputText.replace(pattern, (match) => {
+            const highlightedText = inputText.replace(pattern, match => {
                 hasHighlight = true;
-                // Tentukan warna berdasarkan skor (SAMA DENGAN NOTEBOOK)
-                if (result.lexical >= 0.85) {
-                    return `<span class="highlight-red">${match}</span>`;
-                } else if (result.structure >= 0.60) {
-                    return `<span class="highlight-yellow">${match}</span>`;
-                } else if (result.semantic >= 0.60) {
-                    return `<span class="highlight-blue">${match}</span>`;
-                }
+                if (result.lexical >= 0.85) return `<span class="highlight-red">${match}</span>`;
+                if (result.structure >= 0.60) return `<span class="highlight-yellow">${match}</span>`;
+                if (result.semantic >= 0.60) return `<span class="highlight-blue">${match}</span>`;
                 return match;
             });
-            
-            return { 
-                text: highlightedText, 
-                hasHighlight: hasHighlight 
-            };
+            return { text: highlightedText, hasHighlight };
         }
 
-        // Function to get score badge class
         function getScoreBadgeClass(similarity) {
             if (similarity >= 85) return 'score-badge-red';
             if (similarity >= 70) return 'score-badge-red';
@@ -782,62 +754,31 @@
             return 'score-badge-gray';
         }
 
-        // Main plagiarism check handler
+        // Main plagiarism check
         async function handleCheckPlagiarism() {
-            if (isChecking) return;
-            if (checkBtn.disabled) return;
-
+            if (isChecking || checkBtn.disabled) return;
             isChecking = true;
             checkBtn.innerHTML = `<div class="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div><span>Memeriksa...</span>`;
             checkBtn.disabled = true;
-
-            // Store current input text
-            if (activeTab === "text") {
-                currentInputText = textInput.value;
-            } else {
-                currentInputText = ""; // For file upload, we don't have the text
-            }
-
+            currentInputText = activeTab === 'text' ? textInput.value : '';
             const formData = new FormData();
-            
-            if (activeTab === "upload" && file) {
-                formData.append("file", file);
-            } else if (activeTab === "text") {
-                formData.append("query", textInput.value);
-            }
+            if (activeTab === 'upload' && file) formData.append("file", file);
+            else if (activeTab === 'text') formData.append("query", textInput.value);
 
             try {
-                const resp = await fetch("https://be-plagiarism-checker-production.up.railway.app/predict", { 
-                    method: "POST", 
-                    body: formData 
-                });
-
+                const resp = await fetch("https://be-plagiarism-checker-production.up.railway.app/predict", { method: "POST", body: formData });
                 if (!resp.ok) {
                     const errorText = await resp.text();
-                    
                     let errorMessage = `Error ${resp.status}`;
-                    try {
-                        const errorJson = JSON.parse(errorText);
-                        if (errorJson.error) errorMessage = errorJson.error;
-                    } catch {
-                        errorMessage = errorText.substring(0, 200);
-                    }
-                    
+                    try { const errorJson = JSON.parse(errorText); if (errorJson.error) errorMessage = errorJson.error; } catch {}
                     alert(`Server error: ${errorMessage}`);
                     return;
                 }
 
                 const contentType = resp.headers.get("content-type") || "";
-                
                 if (contentType.includes("application/json")) {
                     const data = await resp.json();
-                    
-                    // Check if it's an error response
-                    if (data.error) {
-                        alert(`Error: ${data.error}`);
-                        return;
-                    }
-                    
+                    if (data.error) { alert(`Error: ${data.error}`); return; }
                     displayResults(data);
                 } else {
                     const text = await resp.text();
@@ -855,277 +796,121 @@
             }
         }
 
-        // Display results function - HANYA TAMPILKAN YANG ADA HIGHLIGHT
+        // Display results
         function displayResults(results) {
-            // Show results container
             resultsContainer.classList.remove('hidden');
-            
-            // Hide all result sections first
             summaryCard.classList.add('hidden');
             detailedResults.classList.add('hidden');
             emptyState.classList.add('hidden');
-            
-            // If no results or empty array
             if (!results || results.length === 0) {
-                summaryCard.classList.remove('hidden');
-                detailedResults.classList.remove('hidden');
-                emptyState.classList.remove('hidden');
-                
-                // Set summary to 0%
-                totalDocs.textContent = "0";
-                maxSimilarity.textContent = "0%";
-                avgSimilarity.textContent = "0%";
-                plagiarismPercent.textContent = "0%";
-                progressBar.style.width = "0%";
-                progressBar.style.backgroundColor = "#10b981";
-                return;
+                summaryCard.classList.remove('hidden'); detailedResults.classList.remove('hidden'); emptyState.classList.remove('hidden');
+                totalDocs.textContent = "0"; maxSimilarity.textContent = "0%"; avgSimilarity.textContent = "0%"; plagiarismPercent.textContent = "0%";
+                progressBar.style.width = "0%"; progressBar.style.backgroundColor = "#10b981"; return;
             }
-            
-            // If results is an array (modern format)
             if (Array.isArray(results)) {
-                // Filter results: Hanya yang memiliki highlight
                 const filteredResults = [];
-                
                 results.forEach(item => {
                     if (currentInputText && currentInputText.trim() !== '') {
                         const highlightResult = highlightText(currentInputText, item);
-                        if (highlightResult.hasHighlight) {
-                            filteredResults.push({
-                                ...item,
-                                highlightText: highlightResult.text
-                            });
-                        }
+                        if (highlightResult.hasHighlight) filteredResults.push({ ...item, highlightText: highlightResult.text });
                     }
                 });
-                
-                // Jika tidak ada yang memiliki highlight
-                if (filteredResults.length === 0) {
-                    summaryCard.classList.remove('hidden');
-                    detailedResults.classList.remove('hidden');
-                    emptyState.classList.remove('hidden');
-                    
-                    // Set summary to 0%
-                    totalDocs.textContent = "0";
-                    maxSimilarity.textContent = "0%";
-                    avgSimilarity.textContent = "0%";
-                    plagiarismPercent.textContent = "0%";
-                    progressBar.style.width = "0%";
-                    progressBar.style.backgroundColor = "#10b981";
-                    return;
+                if (!filteredResults.length) {
+                    summaryCard.classList.remove('hidden'); detailedResults.classList.remove('hidden'); emptyState.classList.remove('hidden');
+                    totalDocs.textContent = "0"; maxSimilarity.textContent = "0%"; avgSimilarity.textContent = "0%"; plagiarismPercent.textContent = "0%";
+                    progressBar.style.width = "0%"; progressBar.style.backgroundColor = "#10b981"; return;
                 }
-                
-                // Calculate statistics from FILTERED results
-                let totalSimilarity = 0;
-                let maxSim = 0;
-                
-                filteredResults.forEach(item => {
-                    const sim = item.similarity || item.final_score * 100 || 0;
-                    totalSimilarity += sim;
-                    if (sim > maxSim) maxSim = sim;
-                });
-                
-                const avgSim = filteredResults.length > 0 ? totalSimilarity / filteredResults.length : 0;
-                
-                // Update summary card with FILTERED results
+
+                let totalSimilarity = 0; let maxSim = 0;
+                filteredResults.forEach(item => { const sim = item.similarity || item.final_score*100 || 0; totalSimilarity += sim; if(sim>maxSim) maxSim=sim; });
+                const avgSim = totalSimilarity / filteredResults.length;
+
                 summaryCard.classList.remove('hidden');
                 totalDocs.textContent = filteredResults.length;
                 maxSimilarity.textContent = maxSim.toFixed(2) + '%';
                 avgSimilarity.textContent = avgSim.toFixed(2) + '%';
                 plagiarismPercent.textContent = maxSim.toFixed(2) + '%';
                 progressBar.style.width = Math.min(maxSim, 100) + '%';
-                
-                // Color code progress bar based on max similarity
-                if (maxSim >= 70) {
-                    progressBar.style.backgroundColor = '#ef4444'; // red
-                } else if (maxSim >= 50) {
-                    progressBar.style.backgroundColor = '#f59e0b'; // amber
-                } else if (maxSim >= 30) {
-                    progressBar.style.backgroundColor = '#3b82f6'; // blue
-                } else if (maxSim > 0) {
-                    progressBar.style.backgroundColor = '#10b981'; // emerald
-                } else {
-                    progressBar.style.backgroundColor = '#9ca3af'; // gray
-                }
-                
-                // Clear and populate detailed results with FILTERED results
-                resultsList.innerHTML = '';
-                detailedResults.classList.remove('hidden');
-                
-                filteredResults.forEach((result, index) => {
-                    const item = createResultCard(index + 1, result, currentInputText);
-                    resultsList.appendChild(item);
-                });
-                
+                if(maxSim>=70) progressBar.style.backgroundColor='#ef4444';
+                else if(maxSim>=50) progressBar.style.backgroundColor='#f59e0b';
+                else if(maxSim>=30) progressBar.style.backgroundColor='#3b82f6';
+                else if(maxSim>0) progressBar.style.backgroundColor='#10b981';
+                else progressBar.style.backgroundColor='#9ca3af';
+
+                resultsList.innerHTML = ''; detailedResults.classList.remove('hidden');
+                filteredResults.forEach((result, index) => { const item = createResultCard(index+1,result,currentInputText); resultsList.appendChild(item); });
                 return;
             }
-            
-            // Legacy format (object with percent_plagiarism)
-            if (results.percent_plagiarism !== undefined) {
-                // For legacy format, show only rows with highlight
-                const rows = results.report_rows || [];
-                const filteredRows = [];
-                
-                rows.forEach(row => {
-                    if (currentInputText && currentInputText.trim() !== '') {
-                        const highlightResult = highlightText(currentInputText, row);
-                        if (highlightResult.hasHighlight) {
-                            filteredRows.push({
-                                ...row,
-                                highlightText: highlightResult.text
-                            });
-                        }
-                    }
-                });
-                
-                if (filteredRows.length === 0) {
-                    summaryCard.classList.remove('hidden');
-                    detailedResults.classList.remove('hidden');
-                    emptyState.classList.remove('hidden');
-                    
-                    plagiarismPercent.textContent = "0%";
-                    progressBar.style.width = "0%";
-                    totalDocs.textContent = "0";
-                    return;
-                }
-                
-                summaryCard.classList.remove('hidden');
-                detailedResults.classList.remove('hidden');
-                
-                plagiarismPercent.textContent = results.percent_plagiarism.toFixed(2) + '%';
-                progressBar.style.width = Math.min(results.percent_plagiarism, 100) + '%';
-                totalDocs.textContent = filteredRows.length;
-                
-                resultsList.innerHTML = '';
-                
-                filteredRows.forEach((row, idx) => {
-                    const item = createResultCard(idx + 1, row, currentInputText);
-                    resultsList.appendChild(item);
-                });
-                return;
-            }
-            
-            // Fallback - no results
             emptyState.classList.remove('hidden');
         }
 
-        // Create result card with highlighted text
-        function createResultCard(index, result, inputText) {
+        function createResultCard(index,result,inputText) {
             const item = document.createElement('div');
-            item.className = 'bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm hover:shadow-md transition-all duration-300';
-            
-            const similarity = result.similarity || result.final_score * 100 || 0;
-            const scorePercent = similarity.toFixed(2) + '%';
-            const scoreBadgeClass = getScoreBadgeClass(similarity);
-            
-            // Get component scores
-            const semantic = result.semantic ? (result.semantic * 100).toFixed(2) + '%' : '0%';
-            const lexical = result.lexical ? (result.lexical * 100).toFixed(2) + '%' : '0%';
-            const structure = result.structure ? (result.structure * 100).toFixed(2) + '%' : '0%';
-            
-            // Use pre-calculated highlight text if available
-            let highlightedTextSection = '';
-            if (result.highlightText && result.highlightText !== inputText) {
-                highlightedTextSection = `
-                    <div class="mt-4">
-                        <div class="matching-text-title">
-                            <i data-lucide="highlighter" class="w-4 h-4"></i>
-                            Teks Input yang Mirip (Highlighted):
-                        </div>
-                        <div class="matching-text">
-                            ${result.highlightText}
-                        </div>
+            item.className='bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm hover:shadow-md transition-all duration-300';
+            const similarity=result.similarity||result.final_score*100||0;
+            const scorePercent=similarity.toFixed(2)+'%';
+            const scoreBadgeClass=getScoreBadgeClass(similarity);
+            const semantic=result.semantic?(result.semantic*100).toFixed(2)+'%':'0%';
+            const lexical=result.lexical?(result.lexical*100).toFixed(2)+'%':'0%';
+            const structure=result.structure?(result.structure*100).toFixed(2)+'%':'0%';
+            let highlightedTextSection='';
+            if(result.highlightText && result.highlightText!==inputText){
+                highlightedTextSection=`
+                <div class="mt-4">
+                    <div class="matching-text-title">
+                        <i data-lucide="highlighter" class="w-4 h-4"></i>
+                        Teks Input yang Mirip (Highlighted):
                     </div>
+                    <div class="matching-text">
+                        ${result.highlightText}
+                    </div>
+                </div>
                 `;
             }
-            
-            item.innerHTML = `
-                <div class="flex items-start justify-between mb-4">
-                    <div class="flex-1">
-                        <div class="flex items-center gap-2 mb-3">
-                            <div class="w-2 h-2 bg-blue-500 rounded-full"></div>
-                            <span class="text-sm font-medium text-slate-500">Hasil #${index}</span>
-                        </div>
-                        <h3 class="text-lg font-bold text-slate-800 mb-2">${escapeHtml(result.title || `Dokumen ${result.index}`)}</h3>
+            item.innerHTML=`
+            <div class="flex items-start justify-between mb-4">
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-3">
+                        <div class="w-2 h-2 bg-blue-500 rounded-full"></div>
+                        <span class="text-sm font-medium text-slate-500">Hasil #${index}</span>
                     </div>
-                    <div class="ml-4 px-3 py-1.5 ${scoreBadgeClass} rounded-full text-sm font-semibold">
-                        ${scorePercent} Similarity
-                    </div>
+                    <h3 class="text-lg font-bold text-slate-800 mb-2">${escapeHtml(result.title||`Dokumen ${result.index}`)}</h3>
                 </div>
-                
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                    <div class="bg-slate-50 rounded-lg p-3">
-                        <p class="text-xs text-slate-500 font-medium">Semantic</p>
-                        <p class="text-lg font-bold text-slate-800">${semantic}</p>
-                    </div>
-                    <div class="bg-slate-50 rounded-lg p-3">
-                        <p class="text-xs text-slate-500 font-medium">Lexical</p>
-                        <p class="text-lg font-bold text-slate-800">${lexical}</p>
-                    </div>
-                    <div class="bg-slate-50 rounded-lg p-3">
-                        <p class="text-xs text-slate-500 font-medium">Structure</p>
-                        <p class="text-lg font-bold text-slate-800">${structure}</p>
-                    </div>
+                <div class="ml-4 px-3 py-1.5 ${scoreBadgeClass} rounded-full text-sm font-semibold">
+                    ${scorePercent} Similarity
                 </div>
-                
-                <div class="space-y-4">
-                    <div>
-                        <p class="text-sm font-semibold text-slate-700 mb-1">URL Referensi:</p>
-                        <a href="${result.url || result.pdf || '#'}" target="_blank" rel="noopener noreferrer" 
-                           class="text-blue-600 hover:text-blue-700 transition-colors flex items-center gap-1 text-sm break-all">
-                            ${escapeHtml(result.url || result.pdf || '#')}
-                            <i data-lucide="external-link" class="w-4 h-4 flex-shrink-0"></i>
-                        </a>
-                    </div>
-                    
-                    <div>
-                        <p class="text-sm font-semibold text-slate-700 mb-1">Abstrak Sumber:</p>
-                        <div class="text-slate-600 text-sm leading-relaxed bg-slate-50 p-3 rounded-lg max-h-40 overflow-y-auto">
-                            ${escapeHtml(result.abstract || 'Tidak tersedia')}
-                        </div>
-                    </div>
-                    
-                    ${highlightedTextSection}
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div class="bg-slate-50 rounded-lg p-3"><p class="text-xs text-slate-500 font-medium">Semantic</p><p class="text-lg font-bold text-slate-800">${semantic}</p></div>
+                <div class="bg-slate-50 rounded-lg p-3"><p class="text-xs text-slate-500 font-medium">Lexical</p><p class="text-lg font-bold text-slate-800">${lexical}</p></div>
+                <div class="bg-slate-50 rounded-lg p-3"><p class="text-xs text-slate-500 font-medium">Structure</p><p class="text-lg font-bold text-slate-800">${structure}</p></div>
+            </div>
+            <div class="space-y-4">
+                <div><p class="text-sm font-semibold text-slate-700 mb-1">URL Referensi:</p>
+                    <a href="${result.url||result.pdf||'#'}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-700 transition-colors flex items-center gap-1 text-sm break-all">
+                    ${escapeHtml(result.url||result.pdf||'#')} <i data-lucide="external-link" class="w-4 h-4 flex-shrink-0"></i>
+                    </a>
                 </div>
+                <div><p class="text-sm font-semibold text-slate-700 mb-1">Abstrak Sumber:</p>
+                <div class="text-slate-600 text-sm leading-relaxed bg-slate-50 p-3 rounded-lg max-h-40 overflow-y-auto">
+                    ${escapeHtml(result.abstract||'Tidak tersedia')}
+                </div></div>
+                ${highlightedTextSection}
+            </div>
             `;
-            
             lucide.createIcons();
             return item;
         }
 
-        // HTML escape function
         function escapeHtml(unsafe) {
-            if (!unsafe) return '';
-            return String(unsafe)
-                .replaceAll('&', '&amp;')
-                .replaceAll('<', '&lt;')
-                .replaceAll('>', '&gt;')
-                .replaceAll('"', '&quot;')
-                .replaceAll("'", '&#039;');
+            if(!unsafe) return '';
+            return String(unsafe).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');
         }
 
-        // Reset function
         function handleReset() {
-            // Reset file upload
-            file = null;
-            fileUpload.value = "";
-            uploadDefault.classList.remove('hidden');
-            uploadValid.classList.add('hidden');
-            fileInfo.classList.add('hidden');
-            uploadedFileName.textContent = "";
-            fileName.textContent = "";
-            
-            // Reset text input
-            textInput.value = "";
-            charCount.textContent = "0";
-            currentInputText = "";
-            
-            // Hide results
-            resultsContainer.classList.add('hidden');
-            summaryCard.classList.add('hidden');
-            detailedResults.classList.add('hidden');
-            emptyState.classList.add('hidden');
-            
-            // Update button state
+            file=null; fileUpload.value=''; uploadDefault.classList.remove('hidden'); uploadValid.classList.add('hidden'); fileInfo.classList.add('hidden'); uploadedFileName.textContent=''; fileName.textContent='';
+            textInput.value=''; charCount.textContent='0'; currentInputText='';
+            resultsContainer.classList.add('hidden'); summaryCard.classList.add('hidden'); detailedResults.classList.add('hidden'); emptyState.classList.add('hidden');
             updateCheckButtonState();
         }
 
