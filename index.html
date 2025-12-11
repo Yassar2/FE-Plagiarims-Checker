@@ -807,7 +807,7 @@
             }
 
             try {
-                const resp = await fetch("http://localhost:5000/predict", { 
+                const resp = await fetch("https://be-plagiarism-checker-production.up.railway.app/predict", { 
                     method: "POST", 
                     body: formData 
                 });
